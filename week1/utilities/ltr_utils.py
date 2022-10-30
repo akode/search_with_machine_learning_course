@@ -94,6 +94,7 @@ def create_feature_log_query(query, doc_ids: t.List[str], click_prior_query, fea
                                 "params": {
                                     "keywords": query,
                                     'skus': query.split(),
+                                    'click_prior_query': click_prior_query,
                                 }
                             }
                         }
