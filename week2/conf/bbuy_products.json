@@ -10,13 +10,9 @@
           ]
         },
         "synonym": {
-          "tokenizer": "standard",
+          "tokenizer": "whitespace",
           "filter": [
-            "english_possessive_stemmer",
-            "lowercase",
-            "english_stop",
-            "english_keywords",
-            "english_stemmer",
+            "stemmer",
             "synonyms_filter"
           ]
         }
