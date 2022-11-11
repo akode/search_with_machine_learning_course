@@ -11,11 +11,14 @@ from urllib.parse import urljoin
 import pandas as pd
 import fileinput
 import logging
-
+import fasttext
+import re
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig(format='%(levelname)s:%(message)s')
+
+query_cls_model = fasttext.load_model("/workspace/datasets/fasttext/query_classification.bin")
 
 # expects clicks and impressions to be in the row
 def create_prior_queries_from_group(
@@ -186,12 +189,33 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
     return query_obj
 
 
+def sanitize_query(query):
+    query = query.lower()
+    query = re.sub('\W+', ' ', query)
+    query = re.sub('[ ]+', " ", query)
+    return query
+
+
 def search(client, user_query, index="bbuy_products", sort="_score", sortDir="desc"):
     #### W3: classify the query
     #### W3: create filters and boosts
     # Note: you may also want to modify the `create_query` method above
-    query_obj = create_query(user_query, click_prior_query=None, filters=None, sort=sort, sortDir=sortDir, source=["name", "shortDescription"])
-    logging.info(query_obj)
+    sanitized_query = sanitize_query(user_query)
+    prediction = query_cls_model.predict(sanitized_query)
+    query_class = prediction[0][0].replace("__label__", "")
+    query_class_score = prediction[1][0]
+    logger.info(f"Query class: {query_class} (Score: {query_class_score})")
+    if query_class_score>0.4:
+        filters = [
+            {
+                "term":  { "categoryPathIds.keyword": query_class },
+            }]
+    else:
+        filters=None
+
+
+    query_obj = create_query(user_query, click_prior_query=None, filters=filters, sort=sort, sortDir=sortDir, source=["name", "shortDescription"])
+    logger.info(query_obj)
     response = client.search(query_obj, index=index)
     if response and response['hits']['hits'] and len(response['hits']['hits']) > 0:
         hits = response['hits']['hits']

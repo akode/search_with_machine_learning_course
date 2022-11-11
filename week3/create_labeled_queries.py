@@ -9,6 +9,9 @@ import csv
 import nltk
 stemmer = nltk.stem.PorterStemmer()
 
+def stem(query: str):
+    return " ".join([stemmer.stem(w) for w in query.split(' ')])
+
 categories_file_name = r'/workspace/datasets/product_data/categories/categories_0001_abcat0010000_to_pcmcat99300050000.xml'
 
 queries_file_name = r'/workspace/datasets/train.csv'
@@ -49,8 +52,27 @@ queries_df = pd.read_csv(queries_file_name)[['category', 'query']]
 queries_df = queries_df[queries_df['category'].isin(categories)]
 
 # IMPLEMENT ME: Convert queries to lowercase, and optionally implement other normalization, like stemming.
+# TODO: Stemming
+queries_df["query"] = queries_df["query"].str.lower().str.replace('\W+', ' ', regex=True).str.replace('[ ]+', " ", regex=True).apply(stem)
 
 # IMPLEMENT ME: Roll up categories to ancestors to satisfy the minimum number of queries per category.
+# TODO: write a faster solution
+while True:
+    n_queries = (
+            queries_df["category"]
+            .value_counts().reset_index()
+            .rename(columns={"index": "category", "category": "n_queries"})
+            .merge(parents_df, on="category", how="right")
+            .dropna()
+            .sort_values("n_queries", ascending=True)
+        )
+    if (n_queries["n_queries"]<min_queries).sum():
+        break
+    print((n_queries["n_queries"]<min_queries).sum(), " small queries left.")
+    smallest_category = n_queries.iloc[0]["category"]
+    smallest_parent = n_queries.iloc[0]["parent"]
+
+    queries_df["category"] = queries_df["category"].replace(smallest_category, smallest_parent)
 
 # Create labels in fastText format.
 queries_df['label'] = '__label__' + queries_df['category']
@@ -59,3 +81,4 @@ queries_df['label'] = '__label__' + queries_df['category']
 queries_df = queries_df[queries_df['category'].isin(categories)]
 queries_df['output'] = queries_df['label'] + ' ' + queries_df['query']
 queries_df[['output']].to_csv(output_file_name, header=False, sep='|', escapechar='\\', quoting=csv.QUOTE_NONE, index=False)
+print(output_file_name)
