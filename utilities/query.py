@@ -23,19 +23,20 @@ model_name = "sentence-transformers/all-MiniLM-L6-v2"
 bert = SentenceTransformer(model_name)
 print(bert)
 
-def create_vector_query(user_query, k=10):
-    embedding = bert.encode([user_query])
-    return {
-        "size": 384,
+def create_vector_query(embedding, filter, size=10):
+    query_obj = {
+        "size": size,
         "query": {
             "knn": {
-            "embedding": {
-                "vector": embedding[0,:],
-                "k": k
+                "embedding": {
+                    "vector": embedding[0,:],
+                    "k": size
+                }
             }
-            }
-        }
-        }
+        },
+        "post_filter": filter
+    }
+    return query_obj
 
 
 # expects clicks and impressions to be in the row
@@ -212,14 +213,37 @@ def search(client, user_query, index="bbuy_products", sort="_score", sortDir="de
     #### W3: create filters and boosts
     # Note: you may also want to modify the `create_query` method above
     if vector_query:
-        query_obj = create_vector_query(user_query, k=10)
+        embedding = bert.encode([user_query])
+        target_size = 10
+        filters = {
+            "bool": {
+                "onSale": True
+            }
+        }
+        size = target_size
+        response_size = 0
+        while True:
+            query_obj = create_vector_query(embedding, filters=filters, size=size)
+            logging.info(query_obj)
+            response = client.search(query_obj, index=index)
+            if response and response['hits']['hits'] and len(response['hits']['hits']) > response_size:
+                response_size = len(response['hits']['hits'])
+                if response_size == target_size:
+                    break
+                else:
+                    size = size * 2
+                hits = response['hits']['hits']
+            else:
+                break
+                
+        print(json.dumps(response, indent=2))
     else:
         query_obj = create_query(user_query, click_prior_query=None, filters=None, sort=sort, sortDir=sortDir, source=["name", "shortDescription"])
-    logging.info(query_obj)
-    response = client.search(query_obj, index=index)
-    if response and response['hits']['hits'] and len(response['hits']['hits']) > 0:
-        hits = response['hits']['hits']
-        print(json.dumps(response, indent=2))
+        logging.info(query_obj)
+        response = client.search(query_obj, index=index)
+        if response and response['hits']['hits'] and len(response['hits']['hits']) > 0:
+            hits = response['hits']['hits']
+            print(json.dumps(response, indent=2))
 
 
 if __name__ == "__main__":
